@@ -120,13 +120,14 @@ fun Pill(label: String, icon: ImageVector, primary: Boolean, onClick: () -> Unit
     }
 
 @Composable
-fun Poster(it: Item, w: Int, h: Int, onClick: () -> Unit = {}) =
-    Focusable(Modifier.size(w.dp, h.dp), onClick = onClick) {
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(it.c1, it.c2))))
-        Text(it.title, Modifier.align(Alignment.CenterStart).padding(16.dp), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        it.progress?.let { p ->
+fun Poster(item: Item, w: Int, h: Int, onClick: () -> Unit = {}) =
+    Focusable(Modifier.size(w.dp, h.dp), onClick = onClick) { _ ->
+        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(item.c1, item.c2))))
+        Text(item.title, Modifier.align(Alignment.CenterStart).padding(16.dp), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        val prog = item.progress
+        if (prog != null) {
             Box(Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(.25f))) {
-                Box(Modifier.fillMaxWidth(p).fillMaxHeight().background(Color.White))
+                Box(Modifier.fillMaxWidth(prog).fillMaxHeight().background(Color.White))
             }
         }
     }
