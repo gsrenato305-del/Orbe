@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -20,34 +20,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Bg = Color(0xFF0E1224)
-private val Purple = Color(0xFF8B5CF6)
-private val Teal = Color(0xFF22B8CF)
-private val Accent = Brush.horizontalGradient(listOf(Purple, Teal))
-private val Glass = Color.White.copy(alpha = 0.10f)
+private val Bg = Color(0xFF0A0A0C)
 
-data class Item(val title: String, val c1: Color, val c2: Color, val progress: Float? = null)
-
-private val continuar = listOf(
-    Item("SUSSURROS", Color(0xFF1B2A3A), Color(0xFF4A5A6A), .55f),
-    Item("A JORNADA", Color(0xFFE9A85B), Color(0xFF3B2A1E), .30f),
-    Item("HORIZONTE", Color(0xFFC98A3C), Color(0xFF2B2016), .10f),
-    Item("THE LORS A", Color(0xFF3B3F9E), Color(0xFFB57BD6)),
-    Item("ALÉM DO MAR", Color(0xFF2E6F8E), Color(0xFF14202B)),
+data class Movie(
+    val title: String, val type: String, val year: String, val genres: String, val stars: Int,
+    val desc: String, val nota: Float, val url: String, val c1: Color, val c2: Color
 )
-private val populares = listOf(
-    Item("", Color(0xFFCFE3E3), Color(0xFFE05A47)), Item("", Color(0xFF1E5AA8), Color(0xFF0B1E3D)),
-    Item("", Color(0xFFD9602B), Color(0xFF7A1E1E)), Item("", Color(0xFF5E9BB5), Color(0xFF17303F)),
-    Item("", Color(0xFF2B9C98), Color(0xFF1A3C4A)), Item("", Color(0xFF7B3FD0), Color(0xFF241046)),
-    Item("", Color(0xFF3A7BA8), Color(0xFF0F2233)),
+
+private const val V = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/"
+private const val DEMO = "Conteúdo de demonstração para testar o player do Orbe."
+
+private val filmes = listOf(
+    Movie("Big Buck Bunny", "FILME", "2008", "Animação, Comédia", 4, "Um coelho gigante e gentil decide dar o troco em três roedores que o provocam.", 7.6f, V + "BigBuckBunny.mp4", Color(0xFF4E8A3E), Color(0xFF0F1E0C)),
+    Movie("Sintel", "FILME", "2010", "Animação, Fantasia", 4, "Uma jovem parte em busca de um dragão filhote que ela adotou e perdeu.", 7.4f, V + "Sintel.mp4", Color(0xFFC97B3A), Color(0xFF1A0E08)),
+    Movie("Tears of Steel", "FILME", "2012", "Ficção Científica", 3, "Guerreiros e cientistas tentam salvar o mundo de robôs que dominam a cidade.", 6.5f, V + "TearsOfSteel.mp4", Color(0xFF3A7BA8), Color(0xFF0A141C)),
+    Movie("Elephants Dream", "FILME", "2006", "Animação, Surreal", 3, "Dois personagens exploram uma máquina gigante e misteriosa.", 6.0f, V + "ElephantsDream.mp4", Color(0xFF7A4BB0), Color(0xFF140C20)),
+)
+private val series = listOf(
+    Movie("Fugas", "SÉRIE", "2024", "Demonstração", 3, DEMO, 6.0f, V + "ForBiggerEscapes.mp4", Color(0xFF5A6A7A), Color(0xFF12161C)),
+    Movie("Explosões", "SÉRIE", "2024", "Demonstração", 3, DEMO, 6.0f, V + "ForBiggerBlazes.mp4", Color(0xFFB5502B), Color(0xFF200E08)),
+    Movie("Diversão", "SÉRIE", "2024", "Demonstração", 3, DEMO, 6.0f, V + "ForBiggerFun.mp4", Color(0xFF2B9C98), Color(0xFF0A1A1C)),
 )
 
 class MainActivity : ComponentActivity() {
@@ -59,154 +67,149 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun OrbeApp() {
-    var screen by remember { mutableStateOf("perfil") }
+    var open by remember { mutableStateOf<Movie?>(null) }
+    var playing by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(Bg)) {
-        when (screen) {
-            "perfil" -> Profiles { screen = "home" }
-            "home" -> Home { screen = "detalhes" }
-            else -> { Home {}; Details(); BackHandler { screen = "home" } }
-        }
+        val m = open
+        if (m == null) Home { open = it }
+        else if (playing) Player(m) { playing = false }
+        else Details(m, { open = null }, { playing = true })
     }
 }
 
 @Composable
 fun Focusable(
-    modifier: Modifier = Modifier, shape: RoundedCornerShape = RoundedCornerShape(18.dp),
-    onClick: () -> Unit = {}, content: @Composable BoxScope.(Boolean) -> Unit
+    modifier: Modifier = Modifier, shape: RoundedCornerShape = RoundedCornerShape(14.dp),
+    onFocus: () -> Unit = {}, onClick: () -> Unit = {}, content: @Composable BoxScope.(Boolean) -> Unit
 ) {
     var f by remember { mutableStateOf(false) }
-    val s by animateFloatAsState(if (f) 1.08f else 1f, label = "scale")
+    val s by animateFloatAsState(if (f) 1.06f else 1f, label = "scale")
     Box(
         modifier.scale(s).clip(shape)
-            .border(if (f) 3.dp else 0.dp, if (f) Brush.linearGradient(listOf(Teal, Purple)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)), shape)
-            .onFocusChanged { f = it.isFocused }.clickable(onClick = onClick),
+            .border(if (f) 3.dp else 0.dp, if (f) Color.White else Color.Transparent, shape)
+            .onFocusChanged { st -> f = st.isFocused; if (st.isFocused) onFocus() }
+            .clickable(onClick = onClick),
     ) { content(f) }
 }
 
 @Composable
-fun Logo() = Row(verticalAlignment = Alignment.CenterVertically) {
-    Box(Modifier.size(52.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Teal, Purple, Color(0xFF1A1040)))))
-    Spacer(Modifier.width(12.dp))
-    Text("Orbe", color = Color(0xFFBFD4F2), fontSize = 40.sp, fontWeight = FontWeight.Medium)
+fun Backdrop(m: Movie, dim: Boolean = false) {
+    Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(m.c1, m.c2))))
+    Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Bg.copy(if (dim) .95f else .85f), Color.Transparent))))
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, Bg))))
 }
 
 @Composable
-fun TopBar() = Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-    Logo()
-    Row(Modifier.clip(RoundedCornerShape(50)).background(Glass).padding(6.dp)) {
-        listOf("Início", "Filmes", "Séries", "Categorias", "Minha Lista").forEachIndexed { i, t ->
-            Focusable(shape = RoundedCornerShape(50)) { f ->
-                val sel = i == 0 || f
-                Text(t, Modifier.background(if (sel) Color(0xFFE6E8EF) else Color.Transparent).padding(horizontal = 24.dp, vertical = 10.dp),
-                    color = if (sel) Color(0xFF111111) else Color.White.copy(.8f), fontSize = 20.sp)
-            }
+fun TopBar() = Row(Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+    Focusable(shape = CircleShape) { _ -> Icon(Icons.Default.Search, null, Modifier.padding(8.dp).size(26.dp), tint = Color.White) }
+    Spacer(Modifier.weight(1f))
+    listOf("Início", "Filmes", "Séries", "Apps").forEachIndexed { i, t ->
+        Focusable(shape = RoundedCornerShape(50)) { _ ->
+            Text(t, Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = Color.White.copy(if (i == 0) 1f else .6f),
+                fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        listOf(Icons.Default.Search, Icons.Default.Person).forEach { ic ->
-            Focusable(shape = CircleShape) { Icon(ic, null, Modifier.background(Glass).padding(12.dp).size(26.dp), tint = Color.White) }
-        }
-    }
+    Spacer(Modifier.weight(1.3f))
 }
 
 @Composable
-fun Pill(label: String, icon: ImageVector, primary: Boolean, onClick: () -> Unit = {}) =
-    Focusable(shape = RoundedCornerShape(50), onClick = onClick) {
-        Row(Modifier.background(if (primary) Accent else Brush.linearGradient(listOf(Color(0xFF3A3F50), Color(0xFF3A3F50))))
-            .padding(horizontal = 30.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(28.dp)); Spacer(Modifier.width(10.dp))
-            Text(label, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
-        }
-    }
-
-@Composable
-fun Poster(item: Item, w: Int, h: Int, onClick: () -> Unit = {}) =
-    Focusable(Modifier.size(w.dp, h.dp), onClick = onClick) { _ ->
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(item.c1, item.c2))))
-        Text(item.title, Modifier.align(Alignment.CenterStart).padding(16.dp), color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        val prog = item.progress
-        if (prog != null) {
-            Box(Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth().height(4.dp).clip(CircleShape).background(Color.White.copy(.25f))) {
-                Box(Modifier.fillMaxWidth(prog).fillMaxHeight().background(Color.White))
-            }
-        }
-    }
-
-@Composable
-fun Home(onDetails: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF6A4CB0), Color.Transparent), center = androidx.compose.ui.geometry.Offset(1500f, 300f), radius = 1100f)))
-    Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 28.dp)) {
-        TopBar()
-        Spacer(Modifier.height(56.dp))
-        Text("◼ SÉRIE ORIGINAL", color = Color.White.copy(.6f), fontSize = 18.sp)
-        Text("Odisseia Orbital", color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Bold)
-        Text("Uma tripulação isolada no limite do sistema solar\nenfrenta o maior mistério da humanidade.", color = Color.White.copy(.7f), fontSize = 20.sp)
-        Spacer(Modifier.height(12.dp))
-        Text("Classificação  4.9", color = Color.White.copy(.7f), fontSize = 16.sp)
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Pill("Assistir", Icons.Default.PlayArrow, true); Pill("Mais Informações", Icons.Default.Add, false, onDetails)
-        }
-        Spacer(Modifier.height(36.dp))
-        Text("Continuar Assistindo", color = Color.White.copy(.85f), fontSize = 26.sp, fontWeight = FontWeight.Medium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(28.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
-            items(continuar) { Poster(it, 340, 200, onDetails) }
-        }
-        Text("Populares no Orbe", color = Color.White.copy(.85f), fontSize = 26.sp, fontWeight = FontWeight.Medium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(28.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
-            items(populares) { Poster(it, 250, 190) }
-        }
-    }
+fun MetaRow(m: Movie) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(m.type, Modifier.border(1.dp, Color.White.copy(.6f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+        color = Color.White.copy(.8f), fontSize = 12.sp)
+    Spacer(Modifier.width(10.dp))
+    Text("${m.year} • ${m.genres} • " + "★".repeat(m.stars) + "☆".repeat(5 - m.stars), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
 }
 
 @Composable
-fun Details() = Box(Modifier.fillMaxSize().background(Bg.copy(.55f)), contentAlignment = Alignment.Center) {
-    Column(Modifier.width(900.dp).clip(RoundedCornerShape(28.dp))
-        .background(Brush.linearGradient(listOf(Color(0xFF2A2F4A), Color(0xFF171B30)))).padding(40.dp)) {
-        Text("Odisseia Orbital", color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-        Text("★★★★☆  4.3 · Gênero · Ano · 2020", color = Color(0xFFFFC53D), fontSize = 20.sp)
-        Spacer(Modifier.height(12.dp))
-        Text("Uma tripulação isolada no limite do sistema solar enfrenta o maior mistério da humanidade.", color = Color.White.copy(.7f), fontSize = 18.sp)
-        Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Pill("Assistir", Icons.Default.PlayArrow, true); Pill("Trailer", Icons.Default.PlayArrow, false)
-        }
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf("Episódios", "Relacionados", "Elenco").forEachIndexed { i, t ->
-                Focusable(shape = RoundedCornerShape(50)) { f ->
-                    val sel = i == 0 || f
-                    Text(t, Modifier.background(if (sel) Color(0xFFE6E8EF) else Color.Transparent).padding(horizontal = 22.dp, vertical = 10.dp),
-                        color = if (sel) Color.Black else Color.White.copy(.8f), fontSize = 20.sp)
-                }
-            }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(vertical = 18.dp)) {
-            items(listOf(Item("Episódio 1", Color(0xFF3A4A5A), Color(0xFF1B2430), .8f), Item("Episódio 2", Color(0xFF4A5A4A), Color(0xFF1B241B), .9f))) {
-                Poster(it, 260, 150)
-            }
-        }
-    }
-}
-
-@Composable
-fun Profiles(onPick: () -> Unit) = Box(
-    Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFF1B1840), Color(0xFF5B3FA8), Color(0xFF14284F)))),
-    contentAlignment = Alignment.Center
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Logo(); Spacer(Modifier.height(40.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
-            listOf("Ana" to Color(0xFFD16BA5), "Pedro" to Color(0xFF6B8FD1), "Kids" to Color(0xFF5BD19A), "Novo Perfil" to Color(0xFF555B70)).forEach { (n, c) ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Focusable(Modifier.size(130.dp), CircleShape, onPick) {
-                        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(c, Purple))), contentAlignment = Alignment.Center) {
-                            Icon(if (n == "Novo Perfil") Icons.Default.Add else Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(60.dp))
+fun Home(onOpen: (Movie) -> Unit) {
+    var hero by remember { mutableStateOf(filmes[0]) }
+    Box(Modifier.fillMaxSize()) {
+        Backdrop(hero)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            TopBar()
+            Box(Modifier.fillMaxWidth().height(250.dp)) {
+                Column(Modifier.align(Alignment.BottomStart).padding(start = 48.dp, bottom = 16.dp)) {
+                    Text(hero.title.uppercase(), color = Color.White, fontSize = 50.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(6.dp)); MetaRow(hero); Spacer(Modifier.height(8.dp))
+                    Text(hero.desc, Modifier.widthIn(max = 560.dp), color = Color.White.copy(.8f), fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(200.dp).height(3.dp).background(Color.White.copy(.25f))) {
+                            Box(Modifier.fillMaxWidth(hero.nota / 10f).fillMaxHeight().background(Color.White))
                         }
+                        Spacer(Modifier.width(12.dp))
+                        Text("Nota " + "%.1f".format(hero.nota).replace('.', ','), color = Color.White.copy(.7f), fontSize = 13.sp)
                     }
-                    Spacer(Modifier.height(14.dp)); Text(n, color = Color.White, fontSize = 22.sp)
                 }
+                Text("Disponível no Orbe", Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 48.dp)
+                    .border(1.5.dp, Color.White.copy(.8f), RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            Rail("Filmes", filmes, { hero = it }, onOpen)
+            Rail("Séries", series, { hero = it }, onOpen)
+        }
+    }
+}
+
+@Composable
+fun Rail(label: String, list: List<Movie>, onFocus: (Movie) -> Unit, onOpen: (Movie) -> Unit) {
+    Text(label, Modifier.padding(start = 48.dp, top = 12.dp), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 48.dp, vertical = 14.dp)) {
+        items(list) { m -> MovieCard(m, { onFocus(m) }, { onOpen(m) }) }
+    }
+}
+
+@Composable
+fun MovieCard(m: Movie, onFocus: () -> Unit, onClick: () -> Unit) =
+    Focusable(Modifier.size(200.dp, 112.dp), RoundedCornerShape(14.dp), onFocus, onClick) { _ ->
+        Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(m.c1, m.c2))))
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(.75f)))))
+        Text(m.title, Modifier.align(Alignment.BottomStart).padding(10.dp), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
+
+@Composable
+fun Pill(label: String, white: Boolean, onClick: () -> Unit = {}, modifier: Modifier = Modifier) =
+    Focusable(modifier, RoundedCornerShape(50), onClick = onClick) { _ ->
+        Text(label, Modifier.background(if (white) Color.White else Color(0xFF2A2A2E)).padding(horizontal = 26.dp, vertical = 14.dp),
+            color = if (white) Color.Black else Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+    }
+
+@Composable
+fun Details(m: Movie, onBack: () -> Unit, onPlay: () -> Unit) {
+    val fr = remember { FocusRequester() }
+    LaunchedEffect(Unit) { fr.requestFocus() }
+    BackHandler(onBack = onBack)
+    Box(Modifier.fillMaxSize()) {
+        Backdrop(m, dim = true)
+        Row(Modifier.fillMaxSize().padding(horizontal = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(m.title.uppercase(), color = Color.White, fontSize = 48.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(8.dp)); MetaRow(m); Spacer(Modifier.height(10.dp))
+                Text(m.desc, Modifier.widthIn(max = 560.dp), color = Color.White.copy(.8f), fontSize = 16.sp)
+                Spacer(Modifier.height(22.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Pill("▶ Assistir", true, onPlay, modifier = Modifier.focusRequester(fr))
+                    Pill("+ Minha lista", false)
+                    Pill("Voltar", false, onBack)
+                }
+            }
+            Box(Modifier.size(150.dp, 225.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(m.c1, m.c2))), contentAlignment = Alignment.BottomCenter) {
+                Text(m.title.uppercase(), Modifier.padding(10.dp), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
             }
         }
     }
+}
+
+@Composable
+fun Player(m: Movie, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val player = remember {
+        ExoPlayer.Builder(ctx).build().apply { setMediaItem(MediaItem.fromUri(m.url)); prepare(); playWhenReady = true }
+    }
+    DisposableEffect(Unit) { onDispose { player.release() } }
+    BackHandler(onBack = onBack)
+    AndroidView(
+        factory = { c -> PlayerView(c).apply { this.player = player; useController = true; isFocusable = true; post { requestFocus() } } },
+        modifier = Modifier.fillMaxSize().background(Color.Black)
+    )
 }
